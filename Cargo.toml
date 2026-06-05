@@ -1,0 +1,18 @@
+[package]
+name = "noisy-skyy"
+version = "0.1.0"
+edition = "2024"
+
+[profile.release]
+opt-level = 3
+
+
+[dependencies]
+clap = { version = "4.6.1", features = ["derive"] }
+cpal = "0.17.3"
+rustfft = "6.4.1"
+
+
+#[command(name = "Noisy Skyy")]
+#[command(version = "0.1.0")]
+#[command(about = "A data transmitter using ultrasonic sound", long_about = None)]
