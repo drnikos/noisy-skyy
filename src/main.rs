@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 mod constants;
 mod data_collector;
+mod receiver;
 mod transmitter;
 
 #[derive(Parser)]
@@ -32,12 +33,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     if cli.mode.listen {
         println!("Listening mode");
+        receiver::receive()?;
     } else {
         if let Some(path) = cli.mode.source {
             let stream = data_collector::str2b(&path)?;
             transmitter::transmit(stream)?;
         }
     }
-
     Ok(())
 }

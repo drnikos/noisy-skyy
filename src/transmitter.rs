@@ -18,7 +18,7 @@ pub fn transmit(bitstream: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
     let channels = config.channels as usize;
 
     let total_bits = bitstream.len();
-    let samples_per_bit: u64 = sample_rate as u64 * BIT_DURATION_MS / 1000;
+    let samples_per_bit = sample_rate as u64 * BIT_DURATION_MS / 1000;
     let mut samples_in_bit = 0u64;
     let mut bit_index = 0usize;
     let mut phase = 0.0f32;
@@ -41,7 +41,7 @@ pub fn transmit(bitstream: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
                 //Each sample in Group
                 split_data.fill(payload);
                 samples_in_bit += 1;
-                bit_index = if samples_in_bit == samples_per_bit {
+                bit_index = if samples_in_bit == samples_per_bit as u64 {
                     samples_in_bit = 0;
                     bit_index + 1
                 } else {
@@ -59,7 +59,7 @@ pub fn transmit(bitstream: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
     )?;
     stream.play().unwrap();
     std::thread::sleep(std::time::Duration::from_millis(
-        total_bits as u64 * BIT_DURATION_MS + 50, //Plus a small buffer just to be sure
+        total_bits as u64 * BIT_DURATION_MS + 100, //Plus a small buffer just to be sure
     ));
 
     Ok(())
