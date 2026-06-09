@@ -1,10 +1,18 @@
+use crate::constants::PREAMBLE;
 use std::{fs, path::PathBuf};
-
 fn convert_to_binary(data: &str) -> Result<Vec<u8>, std::io::Error> {
     let mut res = Vec::new();
+    for c in PREAMBLE.chars() {
+        match c {
+            '0' => res.push(0),
+            '1' => res.push(1),
+            _ => panic!("Invalid character in PREAMBLE: {}", c),
+        }
+    }
+
     for i in data.bytes() {
         for j in (0..8).rev() {
-            res.push(i >> j & 1);
+            res.push((i >> j) & 1);
         }
     }
     for i in res.iter() {

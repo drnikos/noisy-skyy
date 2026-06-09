@@ -41,6 +41,7 @@ pub fn transmit(bitstream: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
                 //Each sample in Group
                 split_data.fill(payload);
                 samples_in_bit += 1;
+
                 bit_index = if samples_in_bit == samples_per_bit as u64 {
                     samples_in_bit = 0;
                     bit_index + 1
