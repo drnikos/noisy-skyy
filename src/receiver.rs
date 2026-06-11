@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use crate::constants::*;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ctrlc::set_handler;
@@ -19,10 +21,12 @@ fn decode_to_bits(key_freq: f32) -> Option<u8> {
     } else if key_freq > ZERO_FREQ - FREQ_TOLERANCE && key_freq < ZERO_FREQ + FREQ_TOLERANCE {
         Some(0)
     } else {
-        eprintln!("Didn't get valid freq range, got {key_freq}!");
+        //eprintln!("Didn't get valid freq range, got {key_freq}!");
         None
     }
 }
+
+//Perform Fast Fourier Transform and return the leading frequency
 fn fft_window(stream: &Vec<f32>, sample_rate: u32) -> Option<f32> {
     let stream_len = stream.len();
     let mut stream_fft: Vec<Complex<f32>> =
@@ -52,6 +56,20 @@ fn convert_to_byte(buffer: &Vec<u8>) -> u8 {
     x
 }
 
+//Hann Window multiplier to smooth the buffer before FFT
+// fn hann_smoothing(buffer: &mut [f32]) {
+//     let n = buffer.len();
+//     if n <= 1 {
+//         return;
+//     }
+//     let mut counter = 0.0f32;
+//     let std_phase = 2.0 * PI / (n as f32 - 1.0);
+//     for i in buffer.iter_mut() {
+//         *i = *i * 0.5 * (1.0 - (counter * std_phase).cos());
+//         counter += 1.0;
+//     }
+// }
+
 ///Receive the input and decode it to data
 pub fn receive() -> Result<(), Box<dyn std::error::Error>> {
     set_handler(|| {
@@ -67,11 +85,7 @@ pub fn receive() -> Result<(), Box<dyn std::error::Error>> {
     let mut bit_counter = 0u8; //To make bytes
     let mut found_pramble = false;
     let mut sync_check_buffer = Vec::new();
-    let mut preamble_as_vec = Vec::new();
-    for i in PREAMBLE.chars() {
-        preamble_as_vec.push(i as u8 - 48);
-    }
-    println!("{samples_per_bit}");
+
     let stream = device.build_input_stream(
         &config,
         move |data: &[f32], _: &cpal::InputCallbackInfo| {
@@ -79,6 +93,7 @@ pub fn receive() -> Result<(), Box<dyn std::error::Error>> {
                 buffer[current_remainder_sample as usize] = *i;
                 current_remainder_sample += 1;
                 if current_remainder_sample == samples_per_bit {
+                    //hann_smoothing(&mut buffer);
                     if let Some(i) = fft_window(&buffer, config.sample_rate) {
                         if let Some(bit) = decode_to_bits(i) {
                             sync_check_buffer.push(bit);
@@ -86,7 +101,7 @@ pub fn receive() -> Result<(), Box<dyn std::error::Error>> {
                                 sync_check_buffer.remove(0);
                             }
                             if !found_pramble {
-                                if sync_check_buffer == preamble_as_vec {
+                                if sync_check_buffer == PREAMBLE_ARRAY {
                                     found_pramble = true;
                                     println!("Preamble detected!");
                                     bit_counter = 0;
@@ -99,7 +114,6 @@ pub fn receive() -> Result<(), Box<dyn std::error::Error>> {
                                     print!("{}", x as char);
                                     bit_counter = 0;
                                 }
-                                print!("{bit}");
                             }
                         };
                     } else {
