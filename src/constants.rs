@@ -2,7 +2,7 @@
 pub const ZERO_FREQ: f32 = 15900.0;
 pub const ONE_FREQ: f32 = 16900.0;
 
-pub const BIT_DURATION_MS: u64 = 10;
+pub const BIT_DURATION_MS: u64 = 20;
 pub const FREQ_TOLERANCE: f32 = 300.0;
 pub const PREAMBLE: &str = "10110111000";
 const PREAMBLE_LEN: usize = PREAMBLE.len();
@@ -28,3 +28,4 @@ pub const PREAMBLE_ARRAY: [u8; PREAMBLE_LEN] = {
     }
     preamble_array_gen()
 };
+pub const PREAMBLE_MASK: u64 = (1u64 << PREAMBLE_LEN) - 1;
