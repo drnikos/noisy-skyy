@@ -3,11 +3,10 @@ pub const ZERO_FREQ: f32 = 15900.0;
 pub const ONE_FREQ: f32 = 16900.0;
 
 pub const BIT_DURATION_MS: u64 = 10;
-pub const FREQ_TOLERANCE: f32 = 300.0;
 pub const PREAMBLE: &str = "11100010010";
 const PREAMBLE_LEN: usize = PREAMBLE.len();
 pub const AMPLITUDE: f32 = 0.5;
-const SILENCE_BARRIER: f32 = 0.01;
+pub const SILENCE_BARRIER: f32 = 0.04;
 
 //Convert PREAMBLE string to a byte array
 pub const PREAMBLE_ARRAY: [u8; PREAMBLE_LEN] = {

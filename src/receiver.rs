@@ -56,6 +56,9 @@ impl DecoderStats {
         self.current_remainder_sample += 1;
         if self.current_remainder_sample == self.buffer.len() {
             self.current_remainder_sample = 0;
+            if calc_rms(&self.buffer) < SILENCE_BARRIER {
+                return;
+            }
             hann_smoothing(&mut self.buffer);
             //Process bit
             if let Some(bit) = goertzel(&self.buffer, &self) {
@@ -96,6 +99,18 @@ fn configure_input_device() -> Result<AudioInput, Box<dyn std::error::Error>> {
         .ok_or("Error finding Input device")?;
     let config = device.default_input_config()?.into();
     Ok(AudioInput { device, config })
+}
+
+fn calc_rms(stream: &[f32]) -> f32 {
+    if stream.is_empty() {
+        return 0.0;
+    }
+
+    let mut sqsum = 0f32;
+    for i in stream.iter() {
+        sqsum += *i * *i;
+    }
+    (sqsum / (stream.len() as f32)).sqrt()
 }
 
 fn goertzel(stream: &[f32], coef: &DecoderStats) -> Option<u8> {
