@@ -1,9 +1,8 @@
-use std::io::Write;
-
 use crate::constants::*;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ctrlc::set_handler;
-use rustfft::{FftPlanner, num_complex::Complex};
+use std::f32::consts::PI;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, PartialEq)]
 enum DecodeStage {
@@ -18,7 +17,6 @@ struct AudioInput {
 
 struct DecoderStats {
     stage: DecodeStage,
-    planner: FftPlanner<f32>, //Will probably replace with Goertzel Algorithm :)
     buffer: Vec<f32>,
     samples_per_bit: u32,
     channels: u8,
@@ -27,17 +25,17 @@ struct DecoderStats {
     preamble_asu64: u64,
     bit_index: usize,
     bit_buffer: u8, //To assemble Bit
+    goertzel_c: [f32; 2],
 }
 
 impl DecoderStats {
-    fn new(samples_per_bit: u32, channels: u8) -> Self {
+    fn new(samples_per_bit: u32, channels: u8, sample_rate: u32) -> Self {
         let mut target = 0u64;
         for &byte in PREAMBLE_ARRAY.iter() {
             target = (target << 1) | (byte as u64);
         }
         Self {
             stage: DecodeStage::PrePreamble,
-            planner: FftPlanner::new(),
             buffer: vec![0.0; samples_per_bit as usize],
             samples_per_bit,
             channels,
@@ -46,19 +44,21 @@ impl DecoderStats {
             preamble_asu64: target,
             bit_index: 0,
             bit_buffer: 0,
+            goertzel_c: [
+                2.0 * (2.0 * PI * ZERO_FREQ / sample_rate as f32).cos(),
+                2.0 * (2.0 * PI * ONE_FREQ / sample_rate as f32).cos(),
+            ],
         }
     }
 
-    fn process_sample(&mut self, sample: f32, sample_rate: u32) {
+    fn process_sample(&mut self, sample: f32) {
         self.buffer[self.current_remainder_sample as usize] = sample;
         self.current_remainder_sample += 1;
         if self.current_remainder_sample == self.buffer.len() {
             self.current_remainder_sample = 0;
             //Process bit
-            if let Some(freq) = fft_window(&self.buffer, sample_rate, &mut self.planner) {
-                if let Some(bit) = decode_to_bits(freq) {
-                    self.process_bit(bit);
-                }
+            if let Some(bit) = goertzel(&self.buffer, &self) {
+                self.process_bit(bit);
             }
         }
     }
@@ -79,7 +79,6 @@ impl DecoderStats {
                 self.bit_index += 1;
                 if self.bit_index == 8 {
                     print!("{}", self.bit_buffer as char);
-                    std::io::stdout().flush().unwrap();
                     self.bit_index = 0;
                     self.bit_buffer = 0;
                 }
@@ -97,39 +96,33 @@ fn configure_input_device() -> Result<AudioInput, Box<dyn std::error::Error>> {
     let config = device.default_input_config()?.into();
     Ok(AudioInput { device, config })
 }
-//Translate a frequency to data bits
-fn decode_to_bits(key_freq: f32) -> Option<u8> {
-    if key_freq > ONE_FREQ - FREQ_TOLERANCE && key_freq < ONE_FREQ + FREQ_TOLERANCE {
-        Some(1)
-    } else if key_freq > ZERO_FREQ - FREQ_TOLERANCE && key_freq < ZERO_FREQ + FREQ_TOLERANCE {
-        Some(0)
-    } else {
-        //eprintln!("Didn't get valid freq range, got {key_freq}!");
-        None
-    }
-}
 
-//Perform Fast Fourier Transform and return the leading frequency
-fn fft_window(stream: &[f32], sample_rate: u32, planner: &mut FftPlanner<f32>) -> Option<f32> {
-    let stream_len = stream.len();
-    let mut stream_fft: Vec<Complex<f32>> =
-        stream.iter().map(|&x| Complex { re: x, im: 0.0 }).collect();
-    let fft = planner.plan_fft_forward(stream_len);
-    fft.process(&mut stream_fft);
-    let mut max_index = 1;
-    let mut max_mag = stream_fft[1].norm_sqr();
-    for i in 2..stream_len / 2 {
-        let mag = stream_fft[i].norm_sqr();
-        if mag > max_mag {
-            max_mag = mag;
-            max_index = i;
+fn goertzel(stream: &[f32], coef: &DecoderStats) -> Option<u8> {
+    if stream.is_empty() {
+        eprintln!("Found stream length 0!");
+        return None;
+    }
+    let mut best = -1.0f32;
+    let mut res = 0u8;
+    for (ind, _) in [ZERO_FREQ, ONE_FREQ].iter().enumerate() {
+        let mut vm2 = 0f32;
+        let mut vm1 = 0.0f32;
+        for j in stream.iter() {
+            let v = coef.goertzel_c[ind] * vm1 - vm2 + *j;
+            vm2 = vm1;
+            vm1 = v;
+        }
+        let power = vm1 * vm1 + vm2 * vm2 - coef.goertzel_c[ind] * vm2 * vm1;
+        if power > best {
+            best = power;
+            res = ind as u8;
         }
     }
 
-    Some(max_index as f32 * sample_rate as f32 / stream_len as f32)
+    Some(res)
 }
 
-//Hann Window multiplier to smooth the buffer before FFT(Doesnt work yet)
+//Hann Window multiplier to smooth the buffer (Doesnt work yet)
 // fn hann_smoothing(buffer: &mut [f32]) {
 //     let n = buffer.len();
 //     if n <= 1 {
@@ -153,13 +146,20 @@ pub fn receive() -> Result<(), Box<dyn std::error::Error>> {
     let channels = input.config.channels as u8;
     let samples_per_bit = (input.config.sample_rate as u64 * BIT_DURATION_MS / 1000) as u32;
 
-    let mut stats = DecoderStats::new(samples_per_bit, channels);
+    let stats = Arc::new(Mutex::new(DecoderStats::new(
+        samples_per_bit,
+        channels,
+        input.config.sample_rate,
+    )));
+    let stats_for_stream = stats.clone();
 
     let stream = input.device.build_input_stream(
-        &input.config,
+        input.config,
         move |data: &[f32], _: &cpal::InputCallbackInfo| {
+            let mut stats_callback = stats_for_stream.lock().unwrap();
+
             for i in data.iter().step_by(channels as usize) {
-                stats.process_sample(*i, input.config.sample_rate);
+                stats_callback.process_sample(*i);
             }
         },
         move |err| {

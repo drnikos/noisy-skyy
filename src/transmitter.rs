@@ -23,7 +23,7 @@ pub fn transmit(bitstream: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
     let mut bit_index = 0usize;
     let mut phase = 0.0f32;
     let stream = device.build_output_stream(
-        &config,
+        config,
         //Each Frame(Set)
         move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
             //Each Group in Frame
