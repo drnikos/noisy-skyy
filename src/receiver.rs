@@ -31,8 +31,8 @@ struct DecoderStats {
 impl DecoderStats {
     fn new(samples_per_bit: u32, channels: u8, sample_rate: u32) -> Self {
         let mut target = 0u64;
-        for &byte in PREAMBLE_ARRAY.iter() {
-            target = (target << 1) | (byte as u64);
+        for &bit in PREAMBLE_ARRAY.iter() {
+            target = (target << 1) | (bit as u64);
         }
         Self {
             stage: DecodeStage::PrePreamble,
@@ -56,6 +56,7 @@ impl DecoderStats {
         self.current_remainder_sample += 1;
         if self.current_remainder_sample == self.buffer.len() {
             self.current_remainder_sample = 0;
+            hann_smoothing(&mut self.buffer);
             //Process bit
             if let Some(bit) = goertzel(&self.buffer, &self) {
                 self.process_bit(bit);
@@ -123,18 +124,18 @@ fn goertzel(stream: &[f32], coef: &DecoderStats) -> Option<u8> {
 }
 
 //Hann Window multiplier to smooth the buffer (Doesnt work yet)
-// fn hann_smoothing(buffer: &mut [f32]) {
-//     let n = buffer.len();
-//     if n <= 1 {
-//         return;
-//     }
-//     let mut counter = 0.0f32;
-//     let std_phase = 2.0 * std::f32::consts::PI / (n as f32 - 1.0);
-//     for i in buffer.iter_mut() {
-//         *i = *i * 0.5 * (1.0 - (counter * std_phase).cos());
-//         counter += 1.0;
-//     }
-// }
+fn hann_smoothing(buffer: &mut [f32]) {
+    let n = buffer.len();
+    if n <= 1 {
+        return;
+    }
+    let mut counter = 0.0f32;
+    let std_phase = 2.0 * std::f32::consts::PI / (n as f32 - 1.0);
+    for i in buffer.iter_mut() {
+        *i = *i * 0.5 * (1.0 - (counter * std_phase).cos());
+        counter += 1.0;
+    }
+}
 
 ///Receive the input and decode it to data
 pub fn receive() -> Result<(), Box<dyn std::error::Error>> {
