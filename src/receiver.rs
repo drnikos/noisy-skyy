@@ -89,7 +89,6 @@ impl DecoderStats {
                 if self.stuffing_index == 5 {
                     if bit == 1 {
                         self.stage = GotEndFlag;
-                        println!("\nMessage received!");
                     }
                     self.stuffing_index = 0;
                     return;
@@ -110,7 +109,8 @@ impl DecoderStats {
                 }
             }
             DecodeStage::GotEndFlag => {
-                exit(0);
+                println!("\nMessage received!");
+                self.stage = DecodeStage::PrePreamble;
             }
         }
     }
