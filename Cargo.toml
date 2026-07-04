@@ -12,6 +12,7 @@ clap = { version = "4.6.1", features = ["derive"] }
 cpal = "0.18.1"
 rustfft = "6.4.1"
 ctrlc = "3.5.2"
+zstd = "0.13.3"
 #[command(name = "Noisy Skyy")]
 #[command(version = "0.1.0")]
 #[command(about = "A data transmitter and receiver using ultrasonic sound", long_about = None)]

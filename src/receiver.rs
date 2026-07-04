@@ -3,7 +3,7 @@ use crate::receiver::DecodeStage::GotEndFlag;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ctrlc::set_handler;
 use std::f32::consts::PI;
-use std::process::exit;
+use std::io;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, PartialEq)]
@@ -30,6 +30,7 @@ struct DecoderStats {
     bit_buffer: u8, //To assemble Bit
     goertzel_c: [f32; 2],
     stuffing_index: u8,
+    message_bytes: Vec<u8>, //For decompression
 }
 
 impl DecoderStats {
@@ -53,6 +54,7 @@ impl DecoderStats {
                 2.0 * (2.0 * PI * ONE_FREQ / sample_rate as f32).cos(),
             ],
             stuffing_index: 0,
+            message_bytes: Vec::new(),
         }
     }
 
@@ -81,6 +83,7 @@ impl DecoderStats {
                     self.stage = DecodeStage::DataCollection;
                     self.bit_index = 0;
                     self.bit_buffer = 0;
+                    self.stuffing_index = 0;
                 }
             }
             DecodeStage::DataCollection => {
@@ -103,13 +106,34 @@ impl DecoderStats {
                 self.bit_buffer = (self.bit_buffer << 1) | bit;
                 self.bit_index += 1;
                 if self.bit_index == 8 {
-                    print!("{}", self.bit_buffer as char);
+                    // print!("{}", self.bit_buffer as char);
+                    self.message_bytes.push(self.bit_buffer);
                     self.bit_index = 0;
                     self.bit_buffer = 0;
                 }
             }
             DecodeStage::GotEndFlag => {
-                println!("\nMessage received!");
+                println!("\nMessage received!\n");
+                match zstd::decode_all(&self.message_bytes[..]) {
+                    Ok(decompressed_data) => {
+                        println!("------- START OF MESSAGE -------");
+
+                        for &i in decompressed_data.iter() {
+                            print!("{}", i as char);
+                        }
+                        println!("\n------- END OF MESSAGE -------");
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to decompress message");
+                        #[cfg(debug_assertions)]
+                        {
+                            eprintln!("Decompress failed: {}", e);
+                            eprintln!("{}: {:02X?}", self.message_bytes.len(), self.message_bytes);
+                        }
+                    }
+                }
+
+                self.message_bytes.clear(); // Flush buffer for next packet
                 self.stage = DecodeStage::PrePreamble;
             }
         }

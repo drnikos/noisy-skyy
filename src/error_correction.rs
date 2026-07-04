@@ -16,8 +16,8 @@ impl ErrorCorrectionToggles {
         res
     }
 
-    pub fn setup(&self, initial_data: &str) -> Vec<u8> {
-        let initial_bits = string_to_binary(initial_data);
+    pub fn setup(&self, initial_data: &[u8]) -> Vec<u8> {
+        let initial_bits = byte_to_bits(&initial_data);
         let stuffed_bits = bit_stuffing(&initial_bits);
         let mut res = Vec::new();
         if self.preamble {
@@ -37,15 +37,24 @@ impl ErrorCorrectionToggles {
     }
 }
 
-fn string_to_binary(data: &str) -> Vec<u8> {
-    let mut res = Vec::new();
+// fn string_to_binary(data: &str) -> Vec<u8> {
+//     let mut res = Vec::new();
 
-    for i in data.bytes() {
-        for j in (0..8).rev() {
-            res.push(((i >> j) & 1) as u8);
+//     for i in data.bytes() {
+//         for j in (0..8).rev() {
+//             res.push(((i >> j) & 1) as u8);
+//         }
+//     }
+
+//     res
+// }
+fn byte_to_bits(bytes: &[u8]) -> Vec<u8> {
+    let mut res = Vec::with_capacity(bytes.len() * 8);
+    for &byte in bytes {
+        for i in (0..8).rev() {
+            res.push((byte >> i) & 1);
         }
     }
-
     res
 }
 
