@@ -7,8 +7,9 @@ pub const PREAMBLE: &str = "11100010010";
 const PREAMBLE_LEN: usize = PREAMBLE.len();
 pub const AMPLITUDE: f32 = 0.5;
 pub const SILENCE_BARRIER: f32 = 0.04;
+pub const ENDING_FLAG: [u8; 8] = [0, 1, 1, 1, 1, 1, 1, 0];
 
-//Convert PREAMBLE string to a byte array
+//Convert PREAMBLE string to a bit array
 pub const PREAMBLE_ARRAY: [u8; PREAMBLE_LEN] = {
     const fn preamble_array_gen() -> [u8; PREAMBLE_LEN] {
         let mut i = 0;

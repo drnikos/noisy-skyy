@@ -1,8 +1,10 @@
+use crate::error_correction::ErrorCorrectionToggles;
 use clap::{Args, Parser};
 use std::path::PathBuf;
 
 mod constants;
 mod data_collector;
+mod error_correction;
 mod receiver;
 mod transmitter;
 
@@ -16,6 +18,9 @@ struct Cli {
 
     #[command(flatten)]
     mode: Mode, //Require user to provide either the listen flag or source argument
+
+    #[arg(short, long, value_name = "PREAMBLE")]
+    preamble: bool,
 }
 #[derive(Args)]
 #[group(required = true, multiple = false)]
@@ -31,12 +36,20 @@ struct Mode {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+
+    let errcortog = ErrorCorrectionToggles {
+        crc: false,
+        preamble: cli.preamble,
+        ending_flag: false,
+        reed_solomon: false,
+    };
+
     if cli.mode.listen {
         println!("Listening mode");
         receiver::receive()?;
     } else {
         if let Some(path) = cli.mode.source {
-            let stream = data_collector::str2b(&path)?;
+            let stream = data_collector::setup(&path, errcortog)?;
             transmitter::transmit(stream)?;
         }
     }

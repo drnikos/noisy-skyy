@@ -1,13 +1,16 @@
 use crate::constants::*;
+use crate::receiver::DecodeStage::GotEndFlag;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ctrlc::set_handler;
 use std::f32::consts::PI;
+use std::process::exit;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, PartialEq)]
 enum DecodeStage {
     PrePreamble,
     DataCollection,
+    GotEndFlag,
 }
 
 struct AudioInput {
@@ -26,6 +29,7 @@ struct DecoderStats {
     bit_index: usize,
     bit_buffer: u8, //To assemble Bit
     goertzel_c: [f32; 2],
+    stuffing_index: u8,
 }
 
 impl DecoderStats {
@@ -48,6 +52,7 @@ impl DecoderStats {
                 2.0 * (2.0 * PI * ZERO_FREQ / sample_rate as f32).cos(),
                 2.0 * (2.0 * PI * ONE_FREQ / sample_rate as f32).cos(),
             ],
+            stuffing_index: 0,
         }
     }
 
@@ -79,6 +84,23 @@ impl DecoderStats {
                 }
             }
             DecodeStage::DataCollection => {
+                // REMOVE BIT STUFFING ZEROS
+
+                if self.stuffing_index == 5 {
+                    if bit == 1 {
+                        self.stage = GotEndFlag;
+                        println!("\nMessage received!");
+                    }
+                    self.stuffing_index = 0;
+                    return;
+                }
+                if bit == 1 {
+                    self.stuffing_index += 1;
+                } else {
+                    self.stuffing_index = 0;
+                }
+                // END OF REMOVAL ALGO
+
                 self.bit_buffer = (self.bit_buffer << 1) | bit;
                 self.bit_index += 1;
                 if self.bit_index == 8 {
@@ -86,6 +108,9 @@ impl DecoderStats {
                     self.bit_index = 0;
                     self.bit_buffer = 0;
                 }
+            }
+            DecodeStage::GotEndFlag => {
+                exit(0);
             }
         }
     }
