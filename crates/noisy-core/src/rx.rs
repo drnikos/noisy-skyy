@@ -37,7 +37,7 @@ impl Receiver {
             state: State::Searching,
             window: vec![0.0; cfg.samples_per_bit(sample_rate)],
             filled: 0,
-            silence_threshold: 0.0,
+            silence_threshold: cfg.silence_threshold,
             demod: Demodulator::new(cfg, sample_rate),
             preamble: PreambleDetector::default(),
             deframer: Deframer::default(),
@@ -102,5 +102,20 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, RxEvent::Frame(d) if d == b"Zdravstvuyte"))
         );
+    }
+
+    // Test if quite signal is ignored
+    #[test]
+    fn quiet_preamble_is_ignored() {
+        use crate::{modulation::bfsk, sync::preamble::PREAMBLE_ARRAY};
+        let quiet = ModemConfig {
+            amplitude: 0.1,
+            ..ModemConfig::default()
+        };
+        let samples = bfsk::modulate(&PREAMBLE_ARRAY, &quiet, 48_000);
+        let mut rx = Receiver::new(&ModemConfig::default(), 48_000);
+        let mut events = Vec::new();
+        rx.push(&samples, &mut events);
+        assert!(events.is_empty());
     }
 }
