@@ -1,0 +1,11 @@
+[package]
+name = "noisy-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+noisy-core.workspace = true
+noisy-audio.workspace = true
+anyhow.workspace = true
+clap.workspace = true
