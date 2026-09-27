@@ -10,7 +10,8 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 noisy-core = { path = "crates/noisy-core" }
 noisy-audio = { path = "crates/noisy-audio" }
-zstd = "0.14"
-cpal = "0.18.1"
-clap = { version = "4.6.1", features = ["derive"] }
-anyhow = "1"
+zstd = "0.14.0"
+cpal = "0.18.2"
+clap = { version = "4.6.7", features = ["derive"] }
+anyhow = "1.0.104"
+hound = "3.5.1"
