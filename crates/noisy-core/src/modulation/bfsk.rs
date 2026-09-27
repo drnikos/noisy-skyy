@@ -1,6 +1,28 @@
-use crate::config::ModemConfig;
+use crate::{config::ModemConfig, detect::goertzel::*};
 use std::f32::consts::PI;
 
+pub struct Demodulator {
+    zero: Goertzel,
+    one: Goertzel,
+}
+
+impl Demodulator {
+    pub fn new(cfg: &ModemConfig, sample_rate: u32) -> Self {
+        Self {
+            zero: Goertzel::new(cfg.zero_freq, sample_rate),
+            one: Goertzel::new(cfg.one_freq, sample_rate),
+        }
+    }
+
+    pub fn decide(&self, window: &mut [f32]) -> u8 {
+        hann(window); // Not sure if its necessary
+        if self.one.power(window) > self.zero.power(window) {
+            1
+        } else {
+            0
+        }
+    }
+}
 /// Takes a slice of bits and outputs a vector of samples
 pub fn modulate(bits: &[u8], cfg: &ModemConfig, sample_rate: u32) -> Vec<f32> {
     let samples_per_bit = cfg.samples_per_bit(sample_rate);

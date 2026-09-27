@@ -1,27 +1,6 @@
-pub const PREAMBLE: &str = "11100010010";
-const PREAMBLE_LEN: usize = PREAMBLE.len();
+use crate::sync::preamble::*;
+
 pub const END_FLAG: [u8; 8] = [0, 1, 1, 1, 1, 1, 1, 0];
-
-/// PREAMBLE  as a bit array
-const PREAMBLE_ARRAY: [u8; PREAMBLE_LEN] = {
-    const fn preamble_array_gen() -> [u8; PREAMBLE_LEN] {
-        let mut i = 0;
-        let mut res = [0; PREAMBLE_LEN];
-        let bytes = PREAMBLE.as_bytes();
-
-        while i < PREAMBLE_LEN {
-            res[i] = match bytes[i] {
-                b'0' => 0,
-                b'1' => 1,
-                _ => panic!("Invalid character in PREAMBLE"),
-            };
-            i += 1;
-        }
-        res
-    }
-    preamble_array_gen()
-};
-pub const PREAMBLE_MASK: u64 = (1u64 << PREAMBLE_LEN) - 1;
 
 fn byte_to_bits(bytes: &[u8]) -> Vec<u8> {
     let mut res = Vec::with_capacity(bytes.len() * 8);
@@ -59,4 +38,85 @@ pub fn build_frame(data: &[u8]) -> Vec<u8> {
     res.extend(stuffed_bits);
     res.extend_from_slice(&END_FLAG);
     res
+}
+
+pub enum Deframed {
+    Nothing,
+    Byte(u8),
+    End,
+}
+
+#[derive(Default)]
+pub struct Deframer {
+    ones: u8,
+    byte: u8,
+    nbits: u8,
+}
+
+impl Deframer {
+    /// Deframes the stream, removing bit stuffing and detecting end flag.
+    /// Returnes the next byte if available, or Deframed::End if the end flag was detected.
+    pub fn push_bit(&mut self, bit: u8) -> Deframed {
+        if self.ones == 5 {
+            self.ones = 0;
+            return if bit == 1 {
+                Deframed::End
+            } else {
+                Deframed::Nothing
+            };
+        }
+        if bit == 1 {
+            self.ones += 1
+        } else {
+            self.ones = 0
+        }
+        self.byte = (self.byte << 1) | bit;
+        self.nbits += 1;
+        if self.nbits == 8 {
+            let b = self.byte;
+            self.byte = 0;
+            self.nbits = 0;
+            Deframed::Byte(b)
+        } else {
+            Deframed::Nothing
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn helper(message: &[u8]) {
+        let frame = build_frame(message);
+
+        // Remove the preamble
+        let frame = &frame[PREAMBLE_LEN..];
+
+        let mut deframer = Deframer::default();
+        let mut output = Vec::new();
+
+        for bit in frame {
+            match deframer.push_bit(*bit) {
+                Deframed::Byte(b) => output.push(b),
+                Deframed::End => break,
+                Deframed::Nothing => {}
+            }
+        }
+        println!("Output: {:?}", output);
+        println!("Message: {:?}", message);
+        assert_eq!(output.len(), message.len());
+        assert_eq!(output, message);
+    }
+
+    #[test]
+    fn deframe_message() {
+        let message = b"Hello, world!";
+        helper(message);
+    }
+    #[test]
+    fn detect_stuffing() {
+        let message = [0xff; 4];
+        helper(&message);
+    }
 }

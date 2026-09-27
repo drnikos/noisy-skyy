@@ -13,11 +13,11 @@ pub struct ModemConfig {
 impl Default for ModemConfig {
     fn default() -> Self {
         Self {
-            zero_freq: 15_900.0,
-            one_freq: 16_900.0,
+            zero_freq: 1_900.0,
+            one_freq: 2_900.0,
             bit_duration_ms: 10,
             amplitude: 0.5,
-            silence_threshold: 0.04,
+            silence_threshold: 0.08,
         }
     }
 }

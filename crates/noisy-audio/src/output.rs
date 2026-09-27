@@ -1,10 +1,6 @@
-//! Plays the sample buffer on the defaoult device
-
+use crate::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::time::Duration;
-
-// For anyhow
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub struct Output {
     device: cpal::Device,

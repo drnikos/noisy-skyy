@@ -1,8 +1,12 @@
 pub mod compress;
 pub mod config;
+pub mod detect;
 pub mod frame;
 pub mod modulation;
+pub mod rx;
+pub mod sync;
 pub mod tx;
+
 #[cfg(test)]
 mod tests {
     use super::*;
