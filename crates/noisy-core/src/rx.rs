@@ -108,14 +108,34 @@ mod tests {
     #[test]
     fn quiet_preamble_is_ignored() {
         use crate::{modulation::bfsk, sync::preamble::PREAMBLE_ARRAY};
-        let quiet = ModemConfig {
-            amplitude: 0.1,
-            ..ModemConfig::default()
-        };
+        let mut quiet = ModemConfig::default();
+        quiet.amplitude = quiet.silence_threshold;
         let samples = bfsk::modulate(&PREAMBLE_ARRAY, &quiet, 48_000);
         let mut rx = Receiver::new(&ModemConfig::default(), 48_000);
         let mut events = Vec::new();
         rx.push(&samples, &mut events);
         assert!(events.is_empty());
+    }
+
+    #[test]
+    fn weak_signal_on_dc_offset_decodes() {
+        let cfg = ModemConfig::default();
+        let weak = ModemConfig {
+            amplitude: 0.01,
+            ..cfg.clone()
+        };
+        let samples: Vec<f32> = crate::tx::samples(b"dc", &weak, 48_000)
+            .unwrap()
+            .iter()
+            .map(|s| s - 0.074)
+            .collect();
+        let mut rx = Receiver::new(&cfg, 48_000);
+        let mut events = Vec::new();
+        rx.push(&samples, &mut events);
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, RxEvent::Frame(d) if d == b"dc"))
+        );
     }
 }
