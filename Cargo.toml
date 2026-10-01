@@ -1,18 +1,20 @@
-[package]
-name = "noisy-skyy"
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
-[profile.release]
-opt-level = 3
-
-
-[dependencies]
-clap = { version = "4.6.1", features = ["derive"] }
-cpal = "0.18.1"
-rustfft = "6.4.1"
-ctrlc = "3.5.2"
-zstd = "0.13.3"
-#[command(name = "Noisy Skyy")]
-#[command(version = "0.1.0")]
-#[command(about = "A data transmitter and receiver using ultrasonic sound", long_about = None)]
+[workspace.dependencies]
+noisy-core = { path = "crates/noisy-core" }
+noisy-audio = { path = "crates/noisy-audio" }
+zstd = "0.14.0"
+cpal = "0.18.2"
+clap = { version = "4.6.7", features = ["derive"] }
+anyhow = "1.0.104"
+hound = "3.5.1"
+thiserror = "2.0.21"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.23"
