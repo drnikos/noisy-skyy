@@ -7,3 +7,5 @@ license.workspace = true
 [dependencies]
 cpal.workspace = true
 hound.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

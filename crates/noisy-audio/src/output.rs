@@ -1,6 +1,7 @@
-use crate::Result;
+use crate::{AudioError, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::time::Duration;
+use tracing::{debug, error};
 
 pub struct Output {
     device: cpal::Device,
@@ -11,8 +12,13 @@ impl Output {
     pub fn open_default() -> Result<Self> {
         let device = cpal::default_host()
             .default_output_device()
-            .ok_or("no output device found")?;
-        let config = device.default_output_config()?.into();
+            .ok_or(AudioError::NoDevice("output"))?;
+        let config: cpal::StreamConfig = device.default_output_config()?.into();
+        debug!(
+            sample_rate = config.sample_rate,
+            channels = config.channels,
+            "opened output device"
+        );
         Ok(Self { device, config })
     }
 
@@ -33,7 +39,7 @@ impl Output {
                     frame.fill(next.next().unwrap_or(0.0)); //Fill with silence if no more samples exist
                 }
             },
-            |err| eprintln!("output stream error: {err}"),
+            |err| error!("output stream error: {err}"),
             None,
         )?;
         stream.play()?;

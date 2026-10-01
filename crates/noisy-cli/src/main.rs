@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use noisy_audio::input::Input;
 use noisy_audio::output::Output;
@@ -9,10 +9,14 @@ use noisy_core::tx;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use tracing::{Level, error, info, warn};
 
 #[derive(Parser)]
 #[command(name = "noisy-skyy", version, about = "Data over ultrasound")]
 struct Cli {
+    #[arg(short, long, global = true, action = clap::ArgAction::Count)]
+    verbose: u8,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -42,6 +46,8 @@ type Sink = Box<dyn Write + Send>;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    init_logging(cli.verbose);
+
     let cfg = ModemConfig::default();
     match cli.command {
         Command::Tx { file, wav } => transmit(&file, wav.as_deref(), &cfg),
@@ -58,15 +64,16 @@ fn main() -> Result<()> {
 fn transmit(file: &Path, wav: Option<&Path>, cfg: &ModemConfig) -> Result<()> {
     let payload =
         std::fs::read(file).with_context(|| format!("Failed to read {}!", file.display()))?;
+
     match wav {
         Some(path) => {
             let samples = tx::samples(&payload, cfg, WAV_DEFAULT_RATE)?;
-            write_wav(path, &samples, WAV_DEFAULT_RATE).map_err(|e| anyhow!(e))?;
+            write_wav(path, &samples, WAV_DEFAULT_RATE)?;
         }
         None => {
-            let speaker = Output::open_default().map_err(|e| anyhow!(e))?;
+            let speaker = Output::open_default()?;
             let samples = tx::samples(&payload, cfg, speaker.sample_rate())?;
-            speaker.play_blocking(samples).map_err(|e| anyhow!(e))?;
+            speaker.play_blocking(samples)?;
         }
     }
     Ok(())
@@ -83,7 +90,7 @@ fn open_sink(path: Option<&Path>) -> Result<Sink> {
 
 /// Decodes a whole WAV file at once. Fails if no frame was found, so `&&` chains stop.
 fn receive_wav(path: &Path, mut out: Sink, cfg: &ModemConfig) -> Result<()> {
-    let (samples, sample_rate) = read_wav(path).map_err(|e| anyhow!(e))?;
+    let (samples, sample_rate) = read_wav(path)?;
     let mut rx = Receiver::new(cfg, sample_rate);
     let mut events = Vec::new();
     rx.push(&samples, &mut events);
@@ -102,36 +109,45 @@ fn receive_wav(path: &Path, mut out: Sink, cfg: &ModemConfig) -> Result<()> {
 }
 
 fn receive_live(mut out: Sink, cfg: &ModemConfig) -> Result<()> {
-    let input = Input::open_default().map_err(|e| anyhow!(e))?;
+    let input = Input::open_default()?;
     let mut rx = Receiver::new(cfg, input.sample_rate());
     let mut events = Vec::new();
-    eprintln!("Listening...");
-    input
-        .run(move |samples| {
-            rx.push(samples, &mut events);
-            for event in events.drain(..) {
-                if let Err(e) = handle(event, &mut out) {
-                    eprintln!("Failed to write output: {e}");
-                }
+    info!("Listening...");
+    input.run(move |samples| {
+        rx.push(samples, &mut events);
+        for event in events.drain(..) {
+            if let Err(e) = handle(event, &mut out) {
+                error!("Failed to write output: {e}");
             }
-        })
-        .map_err(|e| anyhow!(e))
+        }
+    })?;
+    Ok(())
 }
 
-/// Shared by live and WAV mode: status to stderr, data to `out`.
+/// Shared by live and WAV mode: status to stderr, data to 'out'.
 fn handle(event: RxEvent, out: &mut dyn Write) -> std::io::Result<()> {
     match event {
-        RxEvent::SyncFound => eprintln!("preamble found"),
+        RxEvent::SyncFound => info!("preamble found"),
         RxEvent::Frame(data) => {
             out.write_all(&data)?;
             out.flush()?;
         }
         RxEvent::BadFrame { raw, error } => {
-            eprintln!(
-                "decompress failed ({error}): {} bytes {raw:02X?}",
-                raw.len()
-            )
+            warn!(bytes = raw.len(), "bad frame: {error}");
         }
     }
     Ok(())
+}
+
+fn init_logging(verbose: u8) {
+    let level = match verbose {
+        0 => Level::INFO,
+        1 => Level::DEBUG,
+        _ => Level::TRACE,
+    };
+    tracing_subscriber::fmt()
+        .with_max_level(level)
+        .with_writer(std::io::stderr)
+        .with_target(false)
+        .init();
 }

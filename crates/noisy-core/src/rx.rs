@@ -3,15 +3,18 @@ use crate::{
     compress,
     config::ModemConfig,
     detect::energy::rms,
+    error::CoreError,
     frame::{Deframed, Deframer},
     modulation::bfsk::Demodulator,
     sync::preamble::PreambleDetector,
 };
 
+use tracing::{debug, trace};
+
 pub enum RxEvent {
     SyncFound,
     Frame(Vec<u8>),
-    BadFrame { raw: Vec<u8>, error: std::io::Error },
+    BadFrame { raw: Vec<u8>, error: CoreError },
 }
 
 enum State {
@@ -51,10 +54,12 @@ impl Receiver {
             self.filled += 1;
             if self.filled == self.window.len() {
                 self.filled = 0;
-                if rms(&self.window) < self.silence_threshold {
+                let level = rms(&self.window);
+                if level < self.silence_threshold {
                     continue;
                 }
                 let bit = self.demod.decide(&mut self.window);
+                trace!(level, bit, "window");
                 self.on_bit(bit, events);
             }
         }
@@ -66,12 +71,19 @@ impl Receiver {
                 if self.preamble.push_bit(bit) {
                     self.deframer = Deframer::default();
                     self.state = State::Payload;
+                    debug!("preamble detected, change state to Payload");
                     events.push(RxEvent::SyncFound);
                 }
             }
             State::Payload => match self.deframer.push_bit(bit) {
                 Deframed::Byte(b) => self.bytes.push(b),
-                Deframed::End => self.state = State::EndFlag,
+                Deframed::End => {
+                    debug!(
+                        bytes = self.bytes.len(),
+                        "end flag found, change state to EndFlag"
+                    );
+                    self.state = State::EndFlag;
+                }
                 Deframed::Nothing => {}
             },
             State::EndFlag => {

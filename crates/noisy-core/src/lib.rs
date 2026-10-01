@@ -1,6 +1,9 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
+
 pub mod compress;
 pub mod config;
 pub mod detect;
+pub mod error;
 pub mod frame;
 pub mod modulation;
 pub mod rx;
